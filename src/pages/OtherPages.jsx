@@ -219,41 +219,30 @@ export function EmployeeOnboardingPage() {
   // Fetch employee record on mount + check for welcome letter
   useEffect(() => {
     if (!authUser) return
-    // Try profile_id match first, fall back to first on_probation employee for demo
-    supabase.from('employees').select('*').eq('profile_id', authUser.id).maybeSingle()
-      .then(async ({ data }) => {
-        let emp = data
-        if (!emp) {
-          // Fallback for demo — grab first probation employee
-          const { data: fallback } = await supabase
-            .from('employees').select('*').eq('status', 'on_probation').limit(1).single()
-          emp = fallback
-        }
-        if (emp) {
-          setEmployee(emp)
-          if (!emp.welcome_letter_sent) setShowWelcome(true)
-        }
-      })
+
+    const loadEmployee = async () => {
+      // Find employee by profile_id (set during onboarding initiation or SQL link)
+      const { data: emp } = await supabase
+        .from('employees')
+        .select('*')
+        .eq('profile_id', authUser.id)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (emp) {
+        setEmployee(emp)
+        if (!emp.welcome_letter_sent) setShowWelcome(true)
+      }
+    }
+
+    loadEmployee()
   }, [authUser])
 
   const submitInfo = async () => {
+    if (!employee) { showToast('No employee record linked to your account. Please contact HR.', 'error'); return }
     setSubmitting(true)
     try {
-      // Use already-loaded employee, or re-fetch with fallback
-      let empId = employee?.id
-      if (!empId) {
-        const { data: byProfile } = await supabase
-          .from('employees').select('id').eq('profile_id', authUser.id).maybeSingle()
-        if (byProfile) {
-          empId = byProfile.id
-        } else {
-          const { data: fallback } = await supabase
-            .from('employees').select('id').eq('status', 'on_probation').limit(1).single()
-          empId = fallback?.id
-        }
-      }
-      if (!empId) throw new Error('No employee record found. Please ask HR to initiate your onboarding first.')
-
       await supabase.from('employees').update({
         nic_number:              infoForm.nic,
         date_of_birth:           infoForm.dob,
@@ -262,7 +251,7 @@ export function EmployeeOnboardingPage() {
         emergency_contact_phone: infoForm.emergency_phone,
         marital_status:          infoForm.marital_status,
         info_submitted:          true,
-      }).eq('id', empId)
+      }).eq('id', employee.id)
 
       // Notify HR
       const { data: hrProfile } = await supabase
@@ -272,8 +261,8 @@ export function EmployeeOnboardingPage() {
           recipient_id: hrProfile.id,
           type:         'info_posted',
           title:        '📋 Employee Info Submitted',
-          message:      `${employee?.full_name ?? 'An employee'} has submitted their personal information for HR review.`,
-          employee_id:  empId,
+          message:      `${employee.full_name} has submitted their personal information for HR review.`,
+          employee_id:  employee.id,
         })
       }
       showToast('Information submitted for HR review!')

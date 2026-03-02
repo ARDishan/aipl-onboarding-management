@@ -37,7 +37,14 @@ export default function InitiateOnboardingPage() {
         .eq('id', authUser.id)
         .single()
 
-      // 2. Insert Employee
+      // 2. Check if a profile exists for this employee's email (for profile_id linking)
+      const { data: empProfile } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', form.personal_email)
+        .maybeSingle()
+
+      // 3. Insert Employee
       const { data: emp, error: empErr } = await supabase
         .from('employees')
         .insert({
@@ -50,6 +57,8 @@ export default function InitiateOnboardingPage() {
           status:          'on_probation',
           probation_end_date: new Date(new Date(form.date_of_joining).getTime() + 180 * 86400000).toISOString().split('T')[0],
           created_by:      profile.id,
+          // Link profile_id if a matching profile exists for this email
+          profile_id:      empProfile?.id ?? null,
         })
         .select()
         .single()

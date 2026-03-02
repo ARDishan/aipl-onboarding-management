@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 
 export default function LoginPage({ onLogin }) {
-  const [email, setEmail]       = useState('admin@ai.lk')
+  const [email, setEmail]       = useState('admin@aipl.lk')
   const [password, setPassword] = useState('')
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState('')
@@ -48,7 +48,7 @@ export default function LoginPage({ onLogin }) {
 
         <div style={{ marginTop: 24, padding: '12px 14px', background: '#f8fafc', borderRadius: 8, fontSize: 12, color: '#64748b' }}>
           <strong>Demo credentials:</strong><br />
-          Email: admin@ai.lk · Password: Admin@1234
+          Email: admin@aipl.lk · Password: Admin@1234
         </div>
       </div>
     </div>
