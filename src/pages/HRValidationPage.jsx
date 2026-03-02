@@ -15,7 +15,7 @@ function usePendingValidation() {
       .eq('info_submitted', true)
       .is('info_validated_at', null)
       .order('updated_at', { ascending: false })
-    if (!error) setData(data)
+    if (!error) setData(data ?? [])
     setLoading(false)
   }
 

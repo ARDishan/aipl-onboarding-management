@@ -5,19 +5,28 @@ const AppContext = createContext(null)
 export const useApp = () => useContext(AppContext)
 
 export const ROLES = {
-  hr_manager:    { label: 'HR Manager',     color: '#6366f1', bg: '#eef2ff', icon: '👤', nav: ['dashboard','initiate','employees','capex','documents','sla','hris'] },
+  hr_manager:    { label: 'HR Manager',     color: '#6366f1', bg: '#eef2ff', icon: '👤', nav: ['dashboard','initiate','validation','employees','capex','documents','sla','hris'] },
   it_manager:    { label: 'IT Manager',     color: '#0ea5e9', bg: '#e0f2fe', icon: '💻', nav: ['dashboard','user_creation','capex','sla'] },
   admin_officer: { label: 'Admin Officer',  color: '#f59e0b', bg: '#fffbeb', icon: '🗂️', nav: ['dashboard','capex'] },
   trainer:       { label: 'Trainer',        color: '#10b981', bg: '#ecfdf5', icon: '🎓', nav: ['dashboard','training'] },
-  supervisor:    { label: 'Supervisor',     color: '#8b5cf6', bg: '#f5f3ff', icon: '📋', nav: ['dashboard','milestones','evaluations'] },
+  supervisor:    { label: 'Supervisor',     color: '#8b5cf6', bg: '#f5f3ff', icon: '📋', nav: ['dashboard','evaluations','milestones'] },
   employee:      { label: 'New Employee',   color: '#ec4899', bg: '#fdf2f8', icon: '🙋', nav: ['dashboard','my_onboarding','documents','mobile_allowance'] },
 }
 
 export const NAV_LABELS = {
-  dashboard: 'Dashboard', initiate: 'Initiate Onboarding', employees: 'Employees',
-  capex: 'CAPEX Requests', documents: 'Documents', sla: 'SLA Monitor',
-  hris: 'HRIS Sync', user_creation: 'User Creation', training: 'Training Plans',
-  milestones: 'Milestones', evaluations: 'Evaluations', my_onboarding: 'My Onboarding',
+  dashboard:        'Dashboard',
+  initiate:         'Initiate Onboarding',
+  validation:       'Info Validation',
+  employees:        'Employees',
+  capex:            'CAPEX Requests',
+  documents:        'Documents',
+  sla:              'SLA Monitor',
+  hris:             'HRIS Sync',
+  user_creation:    'User Creation',
+  training:         'Training Plans',
+  milestones:       'Milestones',
+  evaluations:      'Probation Evaluations',
+  my_onboarding:    'My Onboarding',
   mobile_allowance: 'Mobile Allowance',
 }
 

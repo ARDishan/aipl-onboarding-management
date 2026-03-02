@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useApp } from '../context/AppContext'
 import { FormField, TextareaField, BtnPrimary, BtnOutline, InfoBox, Card } from '../components/shared'
+import { MultiFileUpload } from '../components/FileUpload'
 
 const INITIAL = {
   // Step 1 — Employee
@@ -9,6 +10,7 @@ const INITIAL = {
   personal_email: '', personal_phone: '', is_urgent: false,
   // Step 2 — JD
   job_title: '', confirmation_criteria: '', training_plan: '',
+  jd_cv_files: [],
   // Step 3 — CAPEX
   capex_type: 'replacement_it', capex_description: '', estimated_cost: '',
   bc_user_creation_required: false,
@@ -71,7 +73,24 @@ export default function InitiateOnboardingPage() {
         .single()
       if (ocErr) throw ocErr
 
-      // 4. Insert CAPEX Request
+      // 4. Save uploaded JD/CV files to onboarding_documents table
+      if (form.jd_cv_files.length > 0) {
+        const docRows = form.jd_cv_files.map(f => ({
+          employee_id:        emp.id,
+          onboarding_case_id: oc.id,
+          document_type:      'jd_signoff',
+          document_name:      f.name,
+          storage_path:       f.path,
+          storage_url:        f.url,
+          uploaded_by:        profile.id,
+          uploaded_at:        new Date().toISOString(),
+          status:             'uploaded',
+          physical_signoff_required: false,
+        }))
+        await supabase.from('onboarding_documents').insert(docRows)
+      }
+
+      // 5. Insert CAPEX Request
       const { error: capexErr } = await supabase
         .from('capex_requests')
         .insert({
@@ -102,10 +121,10 @@ export default function InitiateOnboardingPage() {
         })
       if (ucrErr) throw ucrErr
 
-      // 6. Notify IT manager (fetch IT profile first)
+      // 6. Notify IT manager in-app
       const { data: itProfile } = await supabase
         .from('profiles')
-        .select('id')
+        .select('id, full_name, email')
         .eq('role', 'it_manager')
         .limit(1)
         .single()
@@ -123,7 +142,57 @@ export default function InitiateOnboardingPage() {
         ])
       }
 
-      showToast(`Onboarding initiated for ${form.full_name}! IT & Admin notified.`)
+      // 7. Fire Edge Functions (non-blocking — don't await, just fire)
+      const { data: { session } } = await supabase.auth.getSession()
+      const edgeHeaders = {
+        'Content-Type':  'application/json',
+        'Authorization': `Bearer ${session.access_token}`,
+      }
+      const edgeBase = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`
+
+      // 7a. Email IT Manager — user creation request
+      if (itProfile?.email) {
+        fetch(`${edgeBase}/send-it-user-creation`, {
+          method: 'POST', headers: edgeHeaders,
+          body: JSON.stringify({
+            employee_name:    form.full_name,
+            designation:      form.designation,
+            department:       form.department,
+            preferred_email:  form.preferred_email,
+            m365_required:    form.m365_required,
+            domain_required:  form.domain_required,
+            ess_required:     form.ess_required,
+            bc_required:      form.bc_required,
+            is_urgent:        form.is_urgent,
+            it_manager_email: itProfile.email,
+            it_manager_name:  itProfile.full_name,
+          }),
+        }).catch(e => console.warn('IT email failed:', e))
+      }
+
+      // 7b. Email CAPEX recipient (IT or Admin)
+      const capexRecipientRole = form.capex_type.includes('it') ? 'it_manager' : 'admin_officer'
+      const { data: capexProfile } = await supabase
+        .from('profiles').select('full_name, email').eq('role', capexRecipientRole).limit(1).single()
+
+      if (capexProfile?.email) {
+        fetch(`${edgeBase}/send-capex-notification`, {
+          method: 'POST', headers: edgeHeaders,
+          body: JSON.stringify({
+            capex_type:                form.capex_type,
+            employee_name:             form.full_name,
+            designation:               form.designation,
+            department:                form.department,
+            description:               form.capex_description,
+            estimated_cost:            form.estimated_cost,
+            bc_user_creation_required: form.bc_user_creation_required,
+            recipient_email:           capexProfile.email,
+            recipient_name:            capexProfile.full_name,
+          }),
+        }).catch(e => console.warn('CAPEX email failed:', e))
+      }
+
+      showToast(`Onboarding initiated for ${form.full_name}! Emails sent to IT & Admin.`)
       setForm(INITIAL)
       setStep(1)
     } catch (e) {
@@ -207,14 +276,23 @@ export default function InitiateOnboardingPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 16 }}>
             <TextareaField label="Confirmation Criteria" value={form.confirmation_criteria} onChange={v => set('confirmation_criteria', v)} placeholder="Describe performance criteria required for probation confirmation..." rows={4} />
             <TextareaField label="Training Plan"         value={form.training_plan}         onChange={v => set('training_plan', v)}         placeholder="Outline the training schedule for the first 3 months..."      rows={3} />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: 16, border: '2px dashed #e2e8f0', borderRadius: 10, marginBottom: 8 }}>
-            <span style={{ fontSize: 24 }}>📄</span>
             <div>
-              <div style={{ fontWeight: 600, fontSize: 14 }}>Upload JD Document & CV</div>
-              <div style={{ fontSize: 12, color: '#94a3b8' }}>PDF, DOCX up to 10MB each — Supabase Storage (Day 3)</div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: '#475569', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                JD Document & CV
+              </label>
+              <MultiFileUpload
+                bucket="onboarding-documents"
+                folder={`jd-cv/${form.full_name.replace(/\s+/g, '-').toLowerCase() || 'draft'}`}
+                label="Upload JD & CV (PDF, DOC, DOCX)"
+                files={form.jd_cv_files}
+                onChange={files => set('jd_cv_files', files)}
+              />
+              {form.jd_cv_files.length > 0 && (
+                <div style={{ marginTop: 8, fontSize: 12, color: '#10b981', fontWeight: 600 }}>
+                  ✅ {form.jd_cv_files.length} file{form.jd_cv_files.length > 1 ? 's' : ''} uploaded to Supabase Storage
+                </div>
+              )}
             </div>
-            <BtnOutline>Browse Files</BtnOutline>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 20, borderTop: '1px solid #f1f5f9' }}>
             <BtnOutline onClick={() => setStep(1)}>← Back</BtnOutline>
@@ -340,6 +418,7 @@ export default function InitiateOnboardingPage() {
               ['Job Title', form.job_title],
               ['Criteria', form.confirmation_criteria ? 'Defined ✓' : 'Not set'],
               ['Training Plan', form.training_plan ? 'Provided ✓' : 'Not set'],
+              ['Files Uploaded', form.jd_cv_files.length > 0 ? `${form.jd_cv_files.length} file(s) ✓` : 'None'],
             ]} />
             <ReviewSection title="CAPEX" rows={[
               ['Type', form.capex_type.replace(/_/g, ' ').toUpperCase()],

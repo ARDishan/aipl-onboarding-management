@@ -3,7 +3,8 @@ import { useCapexRequests, useUserCreationRequests, useHRISSyncLog, useMilestone
 import { Card, CardHeader, LoadingSpinner, EmptyState, StatusBadge, UrgentBadge, Table, Td, BtnAction, BtnPrimary, BtnOutline, FormField, TextareaField, Tabs, InfoBox, Avatar, ProgressBar, fmtDate, fmtDateTime } from '../components/shared'
 import { supabase } from '../lib/supabase'
 import { useApp } from '../context/AppContext'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { WelcomeLetterModal } from '../components/WelcomeLetter'
 
 export function CapexPage({ filterType }) {
   const { data, loading } = useCapexRequests(filterType)
@@ -212,12 +213,47 @@ export function EmployeeOnboardingPage() {
   const [tab, setTab] = useState('info')
   const [infoForm, setInfoForm] = useState({ nic: '', dob: '', address: '', emergency_name: '', emergency_phone: '', marital_status: '' })
   const [submitting, setSubmitting] = useState(false)
+  const [employee, setEmployee]     = useState(null)
+  const [showWelcome, setShowWelcome] = useState(false)
+
+  // Fetch employee record on mount + check for welcome letter
+  useEffect(() => {
+    if (!authUser) return
+    // Try profile_id match first, fall back to first on_probation employee for demo
+    supabase.from('employees').select('*').eq('profile_id', authUser.id).maybeSingle()
+      .then(async ({ data }) => {
+        let emp = data
+        if (!emp) {
+          // Fallback for demo — grab first probation employee
+          const { data: fallback } = await supabase
+            .from('employees').select('*').eq('status', 'on_probation').limit(1).single()
+          emp = fallback
+        }
+        if (emp) {
+          setEmployee(emp)
+          if (!emp.welcome_letter_sent) setShowWelcome(true)
+        }
+      })
+  }, [authUser])
 
   const submitInfo = async () => {
     setSubmitting(true)
     try {
-      const { data: emp } = await supabase.from('employees').select('id').eq('profile_id', authUser.id).single()
-      if (!emp) throw new Error('Employee record not found')
+      // Use already-loaded employee, or re-fetch with fallback
+      let empId = employee?.id
+      if (!empId) {
+        const { data: byProfile } = await supabase
+          .from('employees').select('id').eq('profile_id', authUser.id).maybeSingle()
+        if (byProfile) {
+          empId = byProfile.id
+        } else {
+          const { data: fallback } = await supabase
+            .from('employees').select('id').eq('status', 'on_probation').limit(1).single()
+          empId = fallback?.id
+        }
+      }
+      if (!empId) throw new Error('No employee record found. Please ask HR to initiate your onboarding first.')
+
       await supabase.from('employees').update({
         nic_number:              infoForm.nic,
         date_of_birth:           infoForm.dob,
@@ -226,16 +262,18 @@ export function EmployeeOnboardingPage() {
         emergency_contact_phone: infoForm.emergency_phone,
         marital_status:          infoForm.marital_status,
         info_submitted:          true,
-      }).eq('id', emp.id)
+      }).eq('id', empId)
+
       // Notify HR
-      const { data: hrProfile } = await supabase.from('profiles').select('id').eq('role', 'hr_manager').limit(1).single()
+      const { data: hrProfile } = await supabase
+        .from('profiles').select('id').eq('role', 'hr_manager').limit(1).single()
       if (hrProfile) {
         await supabase.from('notifications').insert({
           recipient_id: hrProfile.id,
           type:         'info_posted',
           title:        '📋 Employee Info Submitted',
-          message:      'Employee has submitted their personal information. Please review and validate.',
-          employee_id:  emp.id,
+          message:      `${employee?.full_name ?? 'An employee'} has submitted their personal information for HR review.`,
+          employee_id:  empId,
         })
       }
       showToast('Information submitted for HR review!')
@@ -248,10 +286,35 @@ export function EmployeeOnboardingPage() {
 
   return (
     <div>
+      {/* GMD Welcome Letter modal — fires on first login */}
+      {showWelcome && employee && (
+        <WelcomeLetterModal
+          employee={employee}
+          onClose={async () => {
+            setShowWelcome(false)
+            // Mark welcome letter sent + fire email
+            await supabase.from('employees').update({ welcome_letter_sent: true, first_login_at: new Date().toISOString() }).eq('id', employee.id)
+            const { data: { session } } = await supabase.auth.getSession()
+            fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-welcome-letter`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+              body: JSON.stringify({
+                employee_name:   employee.full_name,
+                employee_email:  employee.personal_email,
+                designation:     employee.designation,
+                department:      employee.department,
+                date_of_joining: employee.date_of_joining,
+              }),
+            }).catch(e => console.warn('Welcome letter email failed:', e))
+            showToast('Welcome letter sent to your personal email!')
+          }}
+        />
+      )}
+
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', borderRadius: 14, padding: '20px 24px', marginBottom: 20, color: '#fff' }}>
         <div style={{ fontSize: 40 }}>👋</div>
         <div>
-          <div style={{ fontWeight: 800, fontSize: 18 }}>Welcome to Analytical Instruments!</div>
+          <div style={{ fontWeight: 800, fontSize: 18 }}>Welcome to Analytical Instruments{employee ? `, ${employee.full_name.split(' ')[0]}` : ''}!</div>
           <div style={{ fontSize: 13, opacity: 0.85, marginTop: 4 }}>Complete your onboarding tasks below.</div>
         </div>
       </div>

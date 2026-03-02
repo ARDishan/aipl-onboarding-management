@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react'
 import { AppProvider, useApp, NAV_LABELS } from './context/AppContext'
-import { Layout } from './components/layout/index.jsx'
+import { Layout } from './components/layout'
 import { supabase } from './lib/supabase'
 
 // Pages
-import LoginPage           from './pages/LoginPage'
-import DashboardPage       from './pages/DashboardPage'
+import LoginPage              from './pages/LoginPage'
+import DashboardPage          from './pages/DashboardPage'
 import InitiateOnboardingPage from './pages/InitiateOnboardingPage'
-import SLAMonitorPage      from './pages/SLAMonitorPage'
+import SLAMonitorPage         from './pages/SLAMonitorPage'
+import HRValidationPage       from './pages/HRValidationPage'
+import SupervisorEvalPage     from './pages/SupervisorEvalPage'
+import MobileAllowancePage    from './pages/MobileAllowancePage'
 import { CapexPage, UserCreationPage, HRISSyncPage, EmployeeOnboardingPage, DocumentsPage, MilestonesPage } from './pages/OtherPages'
-import { ComingSoon }      from './components/shared'
+import { ComingSoon } from './components/shared'
 
 // ─── Auth Gate ───────────────────────────────────────────────
 function AuthGate() {
@@ -35,24 +38,27 @@ function AuthGate() {
   return <AppShell />
 }
 
-// ─── App Shell (authenticated) ───────────────────────────────
+// ─── App Shell ───────────────────────────────────────────────
 function AppShell() {
   const { activePage, activeRole } = useApp()
 
   const renderPage = () => {
     switch (activePage) {
-      case 'dashboard':      return <DashboardPage />
-      case 'initiate':       return <InitiateOnboardingPage />
-      case 'sla':            return <SLAMonitorPage />
-      case 'capex':          return <CapexPage />
-      case 'capex_it':       return <CapexPage filterType="it" />
-      case 'capex_admin':    return <CapexPage filterType="admin" />
-      case 'user_creation':  return <UserCreationPage />
-      case 'hris':           return <HRISSyncPage />
-      case 'my_onboarding':  return <EmployeeOnboardingPage />
-      case 'documents':      return <DocumentsPage />
-      case 'milestones':     return <MilestonesPage />
-      default:               return <ComingSoon page={NAV_LABELS[activePage] ?? activePage} />
+      case 'dashboard':       return <DashboardPage />
+      case 'initiate':        return <InitiateOnboardingPage />
+      case 'validation':      return <HRValidationPage />
+      case 'sla':             return <SLAMonitorPage />
+      case 'capex':           return <CapexPage />
+      case 'capex_it':        return <CapexPage filterType="it" />
+      case 'capex_admin':     return <CapexPage filterType="admin" />
+      case 'user_creation':   return <UserCreationPage />
+      case 'hris':            return <HRISSyncPage />
+      case 'my_onboarding':   return <EmployeeOnboardingPage />
+      case 'documents':       return <DocumentsPage />
+      case 'milestones':      return <MilestonesPage />
+      case 'evaluations':     return <SupervisorEvalPage />
+      case 'mobile_allowance':return <MobileAllowancePage />
+      default:                return <ComingSoon page={NAV_LABELS[activePage] ?? activePage} />
     }
   }
 
